@@ -1,16 +1,13 @@
 
-/Plugins/CustomGravityCharacterMovementComponent/Intermediate
-/Plugins/CustomGravityCharacterMovementComponent/Content
-/Plugins/CustomGravityCharacterMovementComponent/Binaries
 /Saved
 /Intermediate
 /.vs
 /*.sln
 /Binaries
+/Content
 /Plugins/GravityMovementcomponent/Intermediate
 /Plugins/GravityMovementcomponent/Content
 /Plugins/GravityMovementcomponent/Binaries
-/Content
 /Plugins/VoxelFree/Binaries
 /Plugins/VoxelFree/Intermediate
 /Plugins/FlyingNavSystem/Binaries
