@@ -4,7 +4,6 @@
 /.vs
 /*.sln
 /Binaries
-/Content
 /Plugins/GravityMovementcomponent/Intermediate
 /Plugins/GravityMovementcomponent/Content
 /Plugins/GravityMovementcomponent/Binaries
