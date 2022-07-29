@@ -10,6 +10,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include <Kismet/GameplayStatics.h>
 #include <Blueprint/AIBlueprintHelperLibrary.h>
+#include <NavMesh/NavMeshBoundsVolume.h>
 
 #include <GravityMovementcomponent.h>
 #include "FlyingNavFunctionLibrary.h"
@@ -68,6 +69,9 @@ void AGravitySampleCharacter::SetupPlayerInputComponent(class UInputComponent* P
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
 	PlayerInputComponent->BindAction("FClick", IE_Released, this, &AGravitySampleCharacter::FClick);
+	PlayerInputComponent->BindAction("GClick", IE_Released, this, &AGravitySampleCharacter::GClick);
+	PlayerInputComponent->BindAction("CClick", IE_Released, this, &AGravitySampleCharacter::CClick);
+	PlayerInputComponent->BindAction("VClick", IE_Released, this, &AGravitySampleCharacter::VClick);
 
 	PlayerInputComponent->BindAxis("MoveForward", this, &AGravitySampleCharacter::MoveForward);
 	PlayerInputComponent->BindAxis("MoveRight", this, &AGravitySampleCharacter::MoveRight);
@@ -121,33 +125,66 @@ void AGravitySampleCharacter::FClick()
 			auto CharacterPtr = Cast<AGravitySampleCharacter>(Iter);
 			if (CharacterPtr)
 			{
-				const FLatentActionInfo LatentInfo(0, FMath::Rand(), TEXT("OnFinish"), this);
-				NavigationPathPtr = UFlyingNavFunctionLibrary::FindPathToLocationAsynchronously(
+				auto NewPt = Result.ImpactPoint -
+					(
+						Cast<UGravityMovementcomponent>(GetCharacterMovement())->GetGravityDirection() *
+						GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
+						);
+
+				const FLatentActionInfo LatentInfo(0, FMath::Rand(), TEXT("OnFoundPath1"), this);
+				FirstNavigationPathPtr = UFlyingNavFunctionLibrary::FindPathToLocationAsynchronously(
 					this,
 					LatentInfo,
 					CharacterPtr->GetActorLocation(),
-					Result.ImpactPoint,
+					NewPt,
 					this
 				);
 
-				DrawDebugSphere(GetWorld(), Result.ImpactPoint, 50, 10, FColor::Red, true);
+				DrawDebugSphere(GetWorld(), NewPt, 50, 10, FColor::Red, true);
+				DrawDebugSphere(GetWorld(), CharacterPtr->GetActorLocation(), 50, 10, FColor::Green, true);
 			}
 		}
 	}
 }
 
+void AGravitySampleCharacter::GClick()
+{
+}
+
+void AGravitySampleCharacter::CClick()
+{
+
+}
+
+void AGravitySampleCharacter::VClick()
+{
+
+}
+
 void AGravitySampleCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	// 	if (Controller->IsA(APlayerController::StaticClass()))
-	// 	{
-	// 		auto FlyingNavigationDataPtr = UFlyingNavFunctionLibrary::GetFlyingNavigationData(this);
-	// 		if (FlyingNavigationDataPtr)
-	// 		{
-	// 			FlyingNavigationDataPtr->OnFlyingNavGenerationFinished.AddDynamic(this, &AGravitySampleCharacter::OnFinish);
-	// 			FlyingNavigationDataPtr->RebuildNavigationData();
-	// 		}
-	// 	}
+
+	TArray<AActor*>ActorAry;
+	UGameplayStatics::GetAllActorsOfClassWithTag(this, ANavMeshBoundsVolume::StaticClass(), TEXT("NavMesh"), ActorAry);
+
+	for (auto Iter : ActorAry)
+	{
+		auto NavMeshPtr = Cast<ANavMeshBoundsVolume>(Iter);
+		if (NavMeshPtr)
+		{
+//			NavMeshPtr->SetActorTransform(GetActorTransform());
+
+			auto FlyingNavigationDataPtr = UFlyingNavFunctionLibrary::GetFlyingNavigationData(this);
+			if (FlyingNavigationDataPtr)
+			{
+				FlyingNavigationDataPtr->OnFlyingNavGenerationFinished.AddDynamic(this, &AGravitySampleCharacter::OnGenerationFinished1);
+				FlyingNavigationDataPtr->RebuildNavigationData();
+			}
+		}
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(NavTimer, this, &AGravitySampleCharacter::Navigation, 1, true);
 }
 
 void AGravitySampleCharacter::Tick(float Delta)
@@ -155,20 +192,78 @@ void AGravitySampleCharacter::Tick(float Delta)
 	Super::Tick(Delta);
 }
 
-void AGravitySampleCharacter::OnFinish()
+void AGravitySampleCharacter::Navigation()
 {
-	TArray<AActor*>ActorAry;
-	UGameplayStatics::GetAllActorsWithTag(this, TEXT("t"), ActorAry);
-
-	for (auto Iter : ActorAry)
+	if (GetController()->IsA(APlayerController::StaticClass()))
 	{
-		auto CharacterPtr = Cast<AGravitySampleCharacter>(Iter);
-		if (CharacterPtr)
+		TArray<AActor*>ActorAry;
+		UGameplayStatics::GetAllActorsWithTag(this, TEXT("t"), ActorAry);
+
+		for (auto Iter : ActorAry)
 		{
-			UFlyingNavFunctionLibrary::RequestMove(NavigationPathPtr, UAIBlueprintHelperLibrary::GetAIController(CharacterPtr));
-			UFlyingNavFunctionLibrary::DrawNavPath(this, NavigationPathPtr);
+			auto CharacterPtr = Cast<AGravitySampleCharacter>(Iter);
+			if (CharacterPtr)
+			{
+				auto NewPt = GetActorLocation() -
+					(
+						Cast<UGravityMovementcomponent>(GetCharacterMovement())->GetGravityDirection() *
+						GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
+						);
+
+				if (FVector::Distance(CharacterPtr->GetActorLocation(), NewPt) > 100)
+				{
+					const FLatentActionInfo LatentInfo(0, FMath::Rand(), TEXT("OnFoundPath1"), this);
+					FirstNavigationPathPtr = UFlyingNavFunctionLibrary::FindPathToLocationAsynchronously(
+						this,
+						LatentInfo,
+						CharacterPtr->GetActorLocation(),
+						NewPt,
+						this
+					);
+
+					DrawDebugSphere(GetWorld(), NewPt, 50, 10, FColor::Red, false, 1);
+					DrawDebugSphere(GetWorld(), GetActorLocation(), 50, 10, FColor::Green, false, 1);
+				}
+			}
 		}
 	}
+}
+
+void AGravitySampleCharacter::OnGenerationFinished1()
+{
+}
+
+void AGravitySampleCharacter::OnFoundPath1()
+{
+	auto Result = UFlyingNavFunctionLibrary::GetPathfindingResult(FirstNavigationPathPtr);
+	switch (Result)
+	{
+	case EPathfindingResult::Success:
+	{
+		TArray<AActor*>ActorAry;
+		UGameplayStatics::GetAllActorsWithTag(this, TEXT("t"), ActorAry);
+
+		for (auto Iter : ActorAry)
+		{
+			auto CharacterPtr = Cast<AGravitySampleCharacter>(Iter);
+			if (CharacterPtr)
+			{
+				UFlyingNavFunctionLibrary::RequestMove(FirstNavigationPathPtr, UAIBlueprintHelperLibrary::GetAIController(CharacterPtr));
+				UFlyingNavFunctionLibrary::DrawNavPath(this, FirstNavigationPathPtr);
+			}
+		}
+	}
+	break;
+	}
+}
+
+void AGravitySampleCharacter::OnGenerationFinished2()
+{
+}
+
+void AGravitySampleCharacter::OnFoundPath2()
+{
+
 }
 
 void AGravitySampleCharacter::TurnAtRate(float Rate)

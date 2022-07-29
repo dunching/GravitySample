@@ -17,6 +17,8 @@ public:
 
 	UGravityMovementcomponent(const FObjectInitializer& ObjectInitializer);
 
+	FVector GetGravityDirection();
+	
 protected:
 
 	void TickComponentBase(
@@ -197,6 +199,23 @@ protected:
 	virtual void RequestPathMove(
 		const FVector& MoveInput
 	) override;
+
+	virtual FVector GetImpartedMovementBaseVelocity() const override;
+
+	virtual FVector LimitAirControl(
+		float DeltaTime, 
+		const FVector& FallAcceleration,
+		const FHitResult& HitResult,
+		bool bCheckForValidLandingSpot
+	)override;
+
+	virtual FVector HandleSlopeBoosting(
+		const FVector& SlideResult, 
+		const FVector& Delta,
+		const float Time, 
+		const FVector& Normal,
+		const FHitResult& Hit
+	) const override;
 
 	virtual void SetDefaultMovementMode()override;
 

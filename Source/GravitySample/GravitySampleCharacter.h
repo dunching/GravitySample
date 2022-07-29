@@ -55,17 +55,39 @@ protected:
 
 	void FClick();
 
+	void GClick();
+
+	void CClick();
+
+	void VClick();
+
 	virtual void BeginPlay()override;
 
 	virtual void Tick(float Delta)override;
 
 	UFUNCTION()
-		void OnFinish();
+		void Navigation();
+
+	UFUNCTION()
+		void OnGenerationFinished1();
+
+	UFUNCTION()
+		void OnFoundPath1();
+
+	UFUNCTION()
+		void OnGenerationFinished2();
+
+	UFUNCTION()
+		void OnFoundPath2();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		UNavigationPath* NavigationPathPtr = nullptr;
+		UNavigationPath* FirstNavigationPathPtr = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UNavigationPath* SecondNavigationPathPtr = nullptr;
 
 protected:
+
 	// APawn interface
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	// End of APawn interface
@@ -81,5 +103,8 @@ public:
 	{
 		return FollowCamera;
 	}
+
+	FTimerHandle NavTimer;
+
 };
 

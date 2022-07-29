@@ -30,6 +30,11 @@ UGravityMovementcomponent::UGravityMovementcomponent(
 
 }
 
+FVector UGravityMovementcomponent::GetGravityDirection()
+{
+	return GravityDirection;
+}
+
 void UGravityMovementcomponent::TickComponentBase(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	FVector InputVector = FVector::ZeroVector;
@@ -287,11 +292,9 @@ void UGravityMovementcomponent::PhysWalking(
 				const float DesiredDist = Delta.Size();
 				if (DesiredDist > KINDA_SMALL_NUMBER)
 				{
-					const auto LocationVec = UpdatedComponent->GetComponentLocation() - OldLocation;
-					auto XVal = FVector::DotProduct(LocationVec, CapsuleQuat.GetAxisX());
-					auto YVal = FVector::DotProduct(LocationVec, CapsuleQuat.GetAxisY());
+					const auto ActualDist = 
+						UKismetMathLibrary::ProjectVectorOnToPlane(UpdatedComponent->GetComponentLocation() - OldLocation, GravityDirection).Size();
 
-					const float ActualDist = FMath::Sqrt(XVal * XVal + YVal * YVal);
 					remainingTime += timeTick * (1.f - FMath::Min(1.f, ActualDist / DesiredDist));
 				}
 				StartNewPhysics(remainingTime, Iterations);
@@ -478,12 +481,7 @@ void UGravityMovementcomponent::PhysNavWalking(float deltaTime, int32 Iterations
 	{
 		if (bProjectNavMeshWalking)
 		{
-			const auto TraceVec = OldLocation - CachedNavLocation.Location;
-			auto XVal = FVector::DotProduct(TraceVec, CapsuleQuat.GetAxisX());
-			auto YVal = FVector::DotProduct(TraceVec, CapsuleQuat.GetAxisY());
-
-			const float DistSq2D = FMath::Sqrt(XVal * XVal + YVal * YVal);
-
+			const float DistSq2D = UKismetMathLibrary::ProjectVectorOnToPlane(OldLocation - CachedNavLocation.Location, GravityDirection).Size();
 			const float DistZ = FVector::DotProduct(OldLocation - CachedNavLocation.Location, GravityDirection);
 
 			const float TotalCapsuleHeight = CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 2.0f;
@@ -685,12 +683,6 @@ FVector UGravityMovementcomponent::ConstrainInputAcceleration(
 	const FVector& InputAcceleration
 ) const
 {
-	// 	// walking or falling pawns ignore up/down sliding
-	// 	if (FVector::DotProduct(InputAcceleration, -GravityDirection) != 0.f && (IsMovingOnGround() || IsFalling()))
-	// 	{
-	// 		return InputAcceleration;
-	// 	}
-
 	return InputAcceleration;
 }
 
@@ -885,12 +877,7 @@ void UGravityMovementcomponent::JumpOff(AActor* MovementBaseActor)
 			const float MaxSpeed = GetMaxSpeed() * 0.85f;
 			Velocity += MaxSpeed * GetBestDirectionOffActor(MovementBaseActor);
 
-			auto XVal = FVector::DotProduct(Velocity, CapsuleQuat.GetAxisX());
-			auto YVal = FVector::DotProduct(Velocity, CapsuleQuat.GetAxisY());
-
-			const float ActualDist = FMath::Sqrt(XVal * XVal + YVal * YVal);
-
-			if (ActualDist > MaxSpeed)
+			if (UKismetMathLibrary::ProjectVectorOnToPlane(Velocity, GravityDirection).Size() > MaxSpeed)
 			{
 				Velocity = MaxSpeed * Velocity.GetSafeNormal();
 			}
@@ -1378,12 +1365,11 @@ void UGravityMovementcomponent::ComputeFloorDist(
 		const auto DownwardSweepResultTraceStartZ = FVector::DotProduct(DownwardSweepResult->TraceStart, -GravityDirection);
 		const auto DownwardSweepResultTraceEndZ = FVector::DotProduct(DownwardSweepResult->TraceEnd, -GravityDirection);
 
-		const auto TraceVec = DownwardSweepResult->TraceStart - DownwardSweepResult->TraceEnd;
-		auto XVal = FVector::DotProduct(TraceVec, CapsuleQuat.GetAxisX());
-		auto YVal = FVector::DotProduct(TraceVec, CapsuleQuat.GetAxisY());
-
+		auto Len = UKismetMathLibrary::ProjectPointOnToPlane(
+			DownwardSweepResult->TraceStart - DownwardSweepResult->TraceEnd, FVector::ZeroVector, GravityDirection
+		);
 		if ((DownwardSweepResultTraceStartZ > DownwardSweepResultTraceEndZ) &&
-			(FMath::Square(XVal) + FMath::Square(YVal)) <= KINDA_SMALL_NUMBER)
+			(Len.SizeSquared()) <= KINDA_SMALL_NUMBER)
 		{
 			// Reject hits that are barely on the cusp of the radius of the capsule
 			if (IsWithinEdgeTolerance(DownwardSweepResult->Location, DownwardSweepResult->ImpactPoint, PawnRadius))
@@ -1588,6 +1574,111 @@ void UGravityMovementcomponent::RequestPathMove(const FVector& MoveInput)
 // 	}
 
 	Super::Super::RequestPathMove(AdjustedMoveInput);
+}
+
+FVector UGravityMovementcomponent::GetImpartedMovementBaseVelocity() const
+{
+	FVector Result = FVector::ZeroVector;
+	if (CharacterOwner)
+	{
+		UPrimitiveComponent* MovementBase = CharacterOwner->GetMovementBase();
+		if (MovementBaseUtility::IsDynamicBase(MovementBase))
+		{
+			FVector BaseVelocity = MovementBaseUtility::GetMovementBaseVelocity(MovementBase, CharacterOwner->GetBasedMovement().BoneName);
+
+			if (bImpartBaseAngularVelocity)
+			{
+				const FVector CharacterBasePosition =
+					(
+						UpdatedComponent->GetComponentLocation() -
+						(-GravityDirection * CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight())
+					);
+				const FVector BaseTangentialVel = MovementBaseUtility::GetMovementBaseTangentialVelocity(MovementBase, CharacterOwner->GetBasedMovement().BoneName, CharacterBasePosition);
+				BaseVelocity += BaseTangentialVel;
+			}
+
+			if (bImpartBaseVelocityX)
+			{
+				Result.X = BaseVelocity.X;
+			}
+			if (bImpartBaseVelocityY)
+			{
+				Result.Y = BaseVelocity.Y;
+			}
+			if (bImpartBaseVelocityZ)
+			{
+				Result.Z = BaseVelocity.Z;
+			}
+		}
+	}
+
+	return Result;
+}
+
+FVector UGravityMovementcomponent::LimitAirControl(
+	float DeltaTime, const FVector& FallAcceleration, 
+	const FHitResult& HitResult, bool bCheckForValidLandingSpot
+)
+{
+	FVector Result(FallAcceleration);
+
+	auto HitResultNormalZ = FVector::DotProduct(HitResult.Normal, -GravityDirection);
+	if (HitResult.IsValidBlockingHit() && HitResultNormalZ > CharacterMovementConstants::VERTICAL_SLOPE_NORMAL_Z)
+	{
+		if (!bCheckForValidLandingSpot || !IsValidLandingSpot(HitResult.Location, HitResult))
+		{
+			// If acceleration is into the wall, limit contribution.
+			if (FVector::DotProduct(FallAcceleration, HitResult.Normal) < 0.f)
+			{
+				// Allow movement parallel to the wall, but not into it because that may push us up.
+				const FVector Normal2D = HitResult.Normal.GetSafeNormal2D();
+				Result = FVector::VectorPlaneProject(FallAcceleration, Normal2D);
+			}
+		}
+	}
+	else if (HitResult.bStartPenetrating)
+	{
+		// Allow movement out of penetration.
+		return (FVector::DotProduct(Result, HitResult.Normal) > 0.f ? Result : FVector::ZeroVector);
+	}
+
+	return Result;
+}
+
+FVector UGravityMovementcomponent::HandleSlopeBoosting(
+	const FVector& SlideResult, const FVector& Delta, const float Time, const FVector& Normal, const FHitResult& Hit
+) const
+{
+	FVector Result = SlideResult;
+
+	auto ResultZ = FVector::DotProduct(Result, -GravityDirection);
+	auto DeltaZ = FVector::DotProduct(Delta, -GravityDirection);
+	if (ResultZ > 0.f)
+	{
+		// Don't move any higher than we originally intended.
+		const float ZLimit = DeltaZ * Time;
+		if (ResultZ - ZLimit > KINDA_SMALL_NUMBER)
+		{
+			if (ZLimit > 0.f)
+			{
+				// Rescale the entire vector (not just the Z component) otherwise we change the direction and likely head right back into the impact.
+				const float UpPercent = ZLimit / ResultZ;
+				Result *= UpPercent;
+			}
+			else
+			{
+				// We were heading down but were going to deflect upwards. Just make the deflection horizontal.
+				Result = FVector::ZeroVector;
+			}
+
+			// Make remaining portion of original result horizontal and parallel to impact normal.
+			const FVector RemainderXY = (SlideResult - Result);
+			const FVector Adjust = Super::ComputeSlideVector(Normal, 1.f, Normal, Hit);
+			Result += Adjust;
+		}
+	}
+
+	return Result;
 }
 
 void UGravityMovementcomponent::SetDefaultMovementMode()
@@ -1898,12 +1989,11 @@ void UGravityMovementcomponent::StartFalling(
 	// start falling 
 	const float DesiredDist = Delta.Size();
 
-	const auto LocationVec = UpdatedComponent->GetComponentLocation() - subLoc;
-
-	auto XVal = FVector::DotProduct(LocationVec, CapsuleQuat.GetAxisX());
-	auto YVal = FVector::DotProduct(LocationVec, CapsuleQuat.GetAxisY());
-
-	const float ActualDist = FMath::Sqrt(XVal * XVal + YVal * YVal);
+	const float ActualDist = UKismetMathLibrary::ProjectPointOnToPlane(
+		UpdatedComponent->GetComponentLocation() - subLoc,
+		FVector::ZeroVector, 
+		GravityDirection
+	).Size();
 
 	remainingTime = (DesiredDist < KINDA_SMALL_NUMBER)
 		? 0.f
@@ -2253,11 +2343,9 @@ void UGravityMovementcomponent::PhysFalling(float deltaTime, int32 Iterations)
 							const FVector PawnLocation = UpdatedComponent->GetComponentLocation();
 							const float ZMovedDist = FMath::Abs(FVector::DotProduct(PawnLocation, -GravityDirection) - FVector::DotProduct(OldLocation, -GravityDirection));
 
-							const auto LocationVec = PawnLocation - OldLocation;
-							auto XVal = FVector::DotProduct(LocationVec, CapsuleQuat.GetAxisX());
-							auto YVal = FVector::DotProduct(LocationVec, CapsuleQuat.GetAxisY());
-
-							const float MovedDist2DSq = FMath::Square(XVal) + FMath::Square(YVal);
+							const float MovedDist2DSq = UKismetMathLibrary::ProjectPointOnToPlane(
+								PawnLocation - OldLocation, FVector::ZeroVector, GravityDirection
+							).Size();
 							if (ZMovedDist <= 0.2f * timeTick && MovedDist2DSq <= 4.f * timeTick)
 							{
 								const auto Dir = FQuat(GravityDirection, FMath::RandRange(0, 360)).Vector();
