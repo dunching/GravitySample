@@ -50,7 +50,7 @@ void UGravityMovementcomponent::TickComponentBase(float DeltaTime, enum ELevelTi
 		return;
 	}
 
-#if/*def DRAWDEBUGINPUTVECTOR*/1
+#if DRAWDEBUGSHAPE
 	DrawDebugDirectionalArrow(GetWorld(), GetActorLocation(), GetActorLocation() + (InputVector * 100), 20, FColor::Red, false, 10);
 #endif
 
@@ -826,7 +826,7 @@ FVector UGravityMovementcomponent::ComputeGroundMovementDelta(
 	auto Pt = UpdatedComponent->GetComponentLocation();
 	Pt = RampHit.ImpactPoint;
 
-#ifdef DRAWDEBUGINPUTVECTOR
+#if DRAWDEBUGSHAPE
 	DrawDebugDirectionalArrow(GetWorld(), Pt, Pt + ContactNormal * 100, 10, FColor::Red, false, 1);
 #endif
 

@@ -9,6 +9,8 @@ public class GravityMovementcomponent : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
+        PublicDefinitions.Add("DRAWDEBUGSHAPE=1");
+
         PublicIncludePaths.AddRange(
             new string[] {
                          Path.GetFullPath(Path.Combine(ModuleDirectory, "Public")),

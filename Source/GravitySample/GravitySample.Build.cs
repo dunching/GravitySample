@@ -8,6 +8,8 @@ public class GravitySample : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+        PublicDefinitions.Add("DRAWDEBUGSHAPE=1");
+
         PublicDependencyModuleNames.AddRange(new string[] {
             "Core",
             "CoreUObject",

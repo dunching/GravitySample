@@ -95,56 +95,6 @@ void AGravitySampleCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVecto
 
 void AGravitySampleCharacter::FClick()
 {
-	FMinimalViewInfo DesiredView;
-	FollowCamera->GetCameraView(0, DesiredView);
-
-	auto StartPt = DesiredView.Location;
-	auto StopPt = DesiredView.Location + (DesiredView.Rotation.Vector() * 1000);
-
-	FHitResult Result;
-
-	FCollisionObjectQueryParams ObjectQueryParams;
-	ObjectQueryParams.AddObjectTypesToQuery(ECollisionChannel::ECC_WorldStatic);
-
-	FCollisionQueryParams Params;
-	Params.bTraceComplex = false;
-
-	if (GetWorld()->LineTraceSingleByObjectType(
-		Result,
-		StartPt,
-		StopPt,
-		ObjectQueryParams,
-		Params)
-		)
-	{
-		TArray<AActor*>ActorAry;
-		UGameplayStatics::GetAllActorsWithTag(this, TEXT("t"), ActorAry);
-
-		for (auto Iter : ActorAry)
-		{
-			auto CharacterPtr = Cast<AGravitySampleCharacter>(Iter);
-			if (CharacterPtr)
-			{
-				auto NewPt = Result.ImpactPoint -
-					(
-						Cast<UGravityMovementcomponent>(GetCharacterMovement())->GetGravityDirection() *
-						GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
-						);
-
-				const FLatentActionInfo LatentInfo(0, FMath::Rand(), TEXT("OnFoundPath1"), this);
-				FirstNavigationPathPtr = UFlyingNavFunctionLibrary::FindPathToLocationAsynchronously(
-					this,
-					LatentInfo,
-					CharacterPtr->GetActorLocation(),
-					NewPt,
-					this
-				);
-
-				DrawDebugSphere(GetWorld(), NewPt, 50, 10, FColor::Red, true);
-				DrawDebugSphere(GetWorld(), CharacterPtr->GetActorLocation(), 50, 10, FColor::Green, true);
-			}
-		}
-	}
 }
 
 void AGravitySampleCharacter::GClick()
@@ -220,9 +170,10 @@ void AGravitySampleCharacter::Navigation()
 						NewPt,
 						this
 					);
-
+#if DRAWDEBUGSHAPE
 					DrawDebugSphere(GetWorld(), NewPt, 50, 10, FColor::Red, false, 1);
 					DrawDebugSphere(GetWorld(), GetActorLocation(), 50, 10, FColor::Green, false, 1);
+#endif
 				}
 			}
 		}
@@ -249,7 +200,9 @@ void AGravitySampleCharacter::OnFoundPath1()
 			if (CharacterPtr)
 			{
 				UFlyingNavFunctionLibrary::RequestMove(FirstNavigationPathPtr, UAIBlueprintHelperLibrary::GetAIController(CharacterPtr));
+#if DRAWDEBUGSHAPE
 				UFlyingNavFunctionLibrary::DrawNavPath(this, FirstNavigationPathPtr);
+#endif
 			}
 		}
 	}
